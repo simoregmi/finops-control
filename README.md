@@ -52,6 +52,7 @@ The database is created and seeded automatically on first request if it does not
 | ![](docs/screenshots/03-production-confirm.png) | ![](docs/screenshots/04-validation-error.png) | ![](docs/screenshots/06-version-conflict.png) | ![](docs/screenshots/07-audit-log.png) |
 
 **Recorded walkthrough:** a two-minute browser recording of the main flows, with step-by-step results, is in [`docs/walkthrough/`](docs/walkthrough/README.md).
+The approval workflow (request → self-approval blocked → second-person approval → audit) is recorded in [`docs/walkthrough/approvals/`](docs/walkthrough/approvals/README.md).
 
 ## What's implemented
 
