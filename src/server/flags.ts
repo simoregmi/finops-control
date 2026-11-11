@@ -12,9 +12,9 @@ import {
   updateFlagSchema,
 } from "./validation";
 
-const RESOURCE_TYPE = "feature_flag";
+export const RESOURCE_TYPE = "feature_flag";
 
-type FlagRow = {
+export type FlagRow = {
   id: number;
   key: string;
   name: string;
@@ -60,13 +60,13 @@ function loadRow(db: DB, key: string): FlagRow | undefined {
   return db.prepare("SELECT * FROM flags WHERE key = ?").get(key) as FlagRow | undefined;
 }
 
-function requireFlag(db: DB, key: string): { row: FlagRow; flag: Flag } {
+export function requireFlag(db: DB, key: string): { row: FlagRow; flag: Flag } {
   const row = loadRow(db, key);
   if (!row) throw new ServiceError("NOT_FOUND", `Flag '${key}' not found`);
   return { row, flag: toFlag(row, environmentsFor(db, [row.id]).get(row.id)!) };
 }
 
-function assertVersion(flag: Flag, expectedVersion: number): void {
+export function assertVersion(flag: Flag, expectedVersion: number): void {
   if (flag.version !== expectedVersion) {
     throw new ServiceError(
       "VERSION_CONFLICT",
@@ -75,15 +75,25 @@ function assertVersion(flag: Flag, expectedVersion: number): void {
   }
 }
 
-function assertActive(flag: Flag): void {
+export function assertActive(flag: Flag): void {
   if (flag.archived) throw new ServiceError("INVALID_STATE", `Flag '${flag.key}' is archived and read-only`);
 }
 
-function bumpVersion(db: DB, row: FlagRow): void {
+export function bumpVersion(db: DB, row: FlagRow): void {
   const res = db
     .prepare("UPDATE flags SET version = version + 1, updated_at = ? WHERE id = ? AND version = ?")
     .run(new Date().toISOString(), row.id, row.version);
   if (res.changes !== 1) throw new ServiceError("VERSION_CONFLICT", `Flag '${row.key}' was changed concurrently`);
+}
+
+export function assertProductionConfirmed(key: string, confirmProduction: string | undefined): void {
+  if (confirmProduction !== key) {
+    throw new ServiceError(
+      "CONFIRMATION_REQUIRED",
+      "Production changes require explicit confirmation: set confirmProduction to the flag key",
+      [{ path: "confirmProduction", message: `Type '${key}' to confirm` }],
+    );
+  }
 }
 
 // ---------- Queries ----------
@@ -197,11 +207,11 @@ export function updateFlag(db: DB, actor: string, key: string, input: unknown): 
 export function setFlagEnvironment(db: DB, actor: string, key: string, environment: unknown, input: unknown): Flag {
   const env = parse(environmentSchema, environment);
   const data = parse(setEnvironmentSchema, input);
-  if (env === "production" && data.confirmProduction !== key) {
+  if (env === "production") {
+    assertProductionConfirmed(key, data.confirmProduction);
     throw new ServiceError(
-      "CONFIRMATION_REQUIRED",
-      "Production changes require explicit confirmation: set confirmProduction to the flag key",
-      [{ path: "confirmProduction", message: `Type '${key}' to confirm` }],
+      "INVALID_STATE",
+      "Production changes require approval: submit a change request (requestProductionChange) for a second person to approve",
     );
   }
   return db.transaction(() => {

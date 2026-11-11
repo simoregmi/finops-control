@@ -9,6 +9,12 @@ const flagsRoute = await import("@/app/api/flags/route");
 const flagRoute = await import("@/app/api/flags/[key]/route");
 const envRoute = await import("@/app/api/flags/[key]/environments/[environment]/route");
 const auditRoute = await import("@/app/api/audit/route");
+const approvalsRoute = await import("@/app/api/approvals/route");
+const approveRoute = await import("@/app/api/approvals/[id]/approve/route");
+const rejectRoute = await import("@/app/api/approvals/[id]/reject/route");
+
+const BOB = "bob.okafor@finops.example";
+const CARMEN = "carmen.diaz@finops.example";
 
 function req(method: string, path: string, body?: unknown, headers: Record<string, string> = {}) {
   return new NextRequest(`http://localhost${path}`, {
@@ -39,19 +45,45 @@ describe("API", () => {
     expect((await getFlag(flag.key)).environments.production).toBe(false);
   });
 
-  it("records the simulated actor from the x-demo-actor header", async () => {
+  it("turns a confirmed production change into a pending request (202) attributed to the header actor", async () => {
     const res = await envRoute.PUT(
       req(
         "PUT",
         "/api/flags/instant_transfers_v2/environments/production",
         { enabled: true, expectedVersion: flag.version, confirmProduction: flag.key },
-        { "x-demo-actor": "carmen.diaz@finops.example" },
+        { "x-demo-actor": CARMEN },
       ),
       ctx({ key: flag.key, environment: "production" }),
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202);
+    expect(await res.json()).toMatchObject({ status: "pending", requestedBy: CARMEN, requestedEnabled: true, flagKey: flag.key });
+    expect((await getFlag(flag.key)).environments.production).toBe(false);
     const audit = await (await auditRoute.GET(req("GET", "/api/audit?flag=instant_transfers_v2"))).json();
-    expect(audit[0]).toMatchObject({ actor: "carmen.diaz@finops.example", environment: "production" });
+    expect(audit[0]).toMatchObject({ actor: CARMEN, action: "production_change.requested", environment: "production" });
+  });
+
+  it("enforces separation of duties on the server: 403 self-approval, 200 by another actor, 409 on a repeat decision", async () => {
+    const [pending] = await (await approvalsRoute.GET(req("GET", "/api/approvals?status=pending&flag=instant_transfers_v2"))).json();
+    const id = String(pending.id);
+
+    const self = await approveRoute.POST(req("POST", `/api/approvals/${id}/approve`, undefined, { "x-demo-actor": CARMEN }), ctx({ id }));
+    expect(self.status).toBe(403);
+    expect((await self.json()).error.code).toBe("SELF_APPROVAL_FORBIDDEN");
+    expect((await getFlag("instant_transfers_v2")).environments.production).toBe(false);
+
+    const ok = await approveRoute.POST(req("POST", `/api/approvals/${id}/approve`, undefined, { "x-demo-actor": BOB }), ctx({ id }));
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).request).toMatchObject({ status: "approved", reviewedBy: BOB, requestedBy: CARMEN });
+    expect((await getFlag("instant_transfers_v2")).environments.production).toBe(true);
+
+    const again = await rejectRoute.POST(req("POST", `/api/approvals/${id}/reject`, undefined, { "x-demo-actor": BOB }), ctx({ id }));
+    expect(again.status).toBe(409);
+    expect((await again.json()).error.code).toBe("ALREADY_RESOLVED");
+  });
+
+  it("returns 404 for unknown requests and 400 for invalid ids", async () => {
+    expect((await approveRoute.POST(req("POST", "/api/approvals/9999/approve"), ctx({ id: "9999" }))).status).toBe(404);
+    expect((await rejectRoute.POST(req("POST", "/api/approvals/abc/reject"), ctx({ id: "abc" }))).status).toBe(400);
   });
 
   it("falls back to the cookie actor and rejects unknown actors", async () => {
@@ -61,8 +93,9 @@ describe("API", () => {
   });
 
   it("returns 409 on a stale version", async () => {
+    const stale = (await getFlag(flag.key)).version + 1;
     const res = await envRoute.PUT(
-      req("PUT", "/api/flags/instant_transfers_v2/environments/staging", { enabled: false, expectedVersion: flag.version }),
+      req("PUT", "/api/flags/instant_transfers_v2/environments/staging", { enabled: false, expectedVersion: stale }),
       ctx({ key: flag.key, environment: "staging" }),
     );
     expect(res.status).toBe(409);

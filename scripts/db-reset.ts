@@ -6,6 +6,7 @@ const file = databasePath();
 let db = openDb(file);
 db.exec(`
   DROP TABLE IF EXISTS audit_events;
+  DROP TABLE IF EXISTS production_change_requests;
   DROP TABLE IF EXISTS flag_environments;
   DROP TABLE IF EXISTS flags;
 `);
@@ -13,4 +14,4 @@ db.close();
 db = openDb(file);
 seed(db);
 db.close();
-console.log(`Reset ${file}: ${SEED_FLAGS.length} seeded flags, empty audit log.`);
+console.log(`Reset ${file}: ${SEED_FLAGS.length} seeded flags, empty audit log, no change requests.`);

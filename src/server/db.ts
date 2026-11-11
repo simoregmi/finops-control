@@ -40,6 +40,22 @@ CREATE TABLE IF NOT EXISTS audit_events (
 CREATE INDEX IF NOT EXISTS idx_audit_resource ON audit_events(resource_type, resource_key);
 CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_events(actor);
 
+CREATE TABLE IF NOT EXISTS production_change_requests (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  flag_id           INTEGER NOT NULL REFERENCES flags(id),
+  flag_key          TEXT NOT NULL,
+  requested_enabled INTEGER NOT NULL CHECK (requested_enabled IN (0, 1)),
+  previous_enabled  INTEGER NOT NULL CHECK (previous_enabled IN (0, 1)),
+  base_version      INTEGER NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  requested_by      TEXT NOT NULL,
+  requested_at      TEXT NOT NULL,
+  reviewed_by       TEXT,
+  reviewed_at       TEXT,
+  CHECK (status <> 'approved' OR reviewed_by <> requested_by)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pcr_one_pending_per_flag ON production_change_requests(flag_id) WHERE status = 'pending';
+
 -- Defense in depth: the service layer never does these, and the database refuses them too.
 CREATE TRIGGER IF NOT EXISTS audit_events_no_update BEFORE UPDATE ON audit_events
 BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END;
@@ -50,6 +66,11 @@ WHEN NEW.key <> OLD.key
 BEGIN SELECT RAISE(ABORT, 'flag key is immutable'); END;
 CREATE TRIGGER IF NOT EXISTS flags_no_delete BEFORE DELETE ON flags
 BEGIN SELECT RAISE(ABORT, 'flags are archived, never deleted'); END;
+CREATE TRIGGER IF NOT EXISTS pcr_resolved_immutable BEFORE UPDATE ON production_change_requests
+WHEN OLD.status <> 'pending'
+BEGIN SELECT RAISE(ABORT, 'resolved change requests are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS pcr_no_delete BEFORE DELETE ON production_change_requests
+BEGIN SELECT RAISE(ABORT, 'change requests are never deleted'); END;
 `;
 
 export function openDb(file: string): DB {

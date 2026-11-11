@@ -26,6 +26,26 @@ export interface AuditEvent {
   createdAt: string;
 }
 
+export type ApprovalStatus = "pending" | "approved" | "rejected";
+
+/** A request to change a flag in production. It takes effect only when a different actor approves it. */
+export interface ProductionChangeRequest {
+  id: number;
+  flagKey: string;
+  flagName: string;
+  requestedEnabled: boolean;
+  previousEnabled: boolean;
+  baseVersion: number;
+  currentFlagVersion: number;
+  /** Pending request whose flag changed after submission; it can no longer be approved. */
+  stale: boolean;
+  status: ApprovalStatus;
+  requestedBy: string;
+  requestedAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+}
+
 export interface ApiErrorBody {
   error: { code: string; message: string; details?: { path: string; message: string }[] };
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AuditTable } from "@/components/AuditTable";
+import { listProductionChangeRequests } from "@/server/approvals";
 import { listAuditEvents } from "@/server/audit";
 import { getDb } from "@/server/db";
 import { ServiceError } from "@/server/errors";
@@ -20,6 +21,7 @@ export default async function FlagPage({ params }: { params: Promise<{ key: stri
     throw e;
   }
   const events = listAuditEvents(db, { flag: key, limit: 50 });
+  const [pendingRequest = null] = listProductionChangeRequests(db, { status: "pending", flag: key });
 
   return (
     <div className="space-y-6">
@@ -28,7 +30,7 @@ export default async function FlagPage({ params }: { params: Promise<{ key: stri
         <h1 className="mt-1 font-mono text-2xl font-semibold">{flag.key}</h1>
         <p className="text-sm text-slate-500">{flag.name}</p>
       </div>
-      <FlagEditor key={flag.key} initial={flag} />
+      <FlagEditor key={flag.key} initial={flag} pendingRequest={pendingRequest} />
       <section className="space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">History</h2>

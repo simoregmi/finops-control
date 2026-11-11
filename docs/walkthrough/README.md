@@ -1,5 +1,7 @@
 # FinOps Control browser walkthrough
 
+> **Note:** this walkthrough was recorded before the production change approval workflow was added. Production toggles now create a pending request that a second person approves on the Approvals page (see the main README).
+
 Recorded on 2026-11-10 against `http://localhost:3000`, branch
 `devin/1794284288-finops-control-poc`, commit `083b650`.
 Ubuntu, maximized Chrome, Next.js 15.5.29 production server (`next start -p 3000`),
