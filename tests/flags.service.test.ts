@@ -96,11 +96,15 @@ describe("environment toggles", () => {
     expect(auditCount(db)).toBe(0);
   });
 
-  it("allows production changes when confirmProduction equals the flag key", () => {
+  it("never applies a confirmed production change directly: it must go through approval", () => {
     const f = getFlag(db, "instant_transfers_v2");
-    const after = setFlagEnvironment(db, BOB, f.key, "production", { enabled: true, expectedVersion: f.version, confirmProduction: f.key });
-    expect(after.environments.production).toBe(true);
-    expect(listAuditEvents(db)[0]).toMatchObject({ actor: BOB, environment: "production", newValue: { enabled: true } });
+    const err = expectServiceError(
+      () => setFlagEnvironment(db, BOB, f.key, "production", { enabled: true, expectedVersion: f.version, confirmProduction: f.key }),
+      "INVALID_STATE",
+    );
+    expect(err.message).toMatch(/approval/);
+    expect(getFlag(db, f.key)).toEqual(f);
+    expect(auditCount(db)).toBe(0);
   });
 
   it("rejects invalid environment and non-boolean enabled", () => {
@@ -126,11 +130,11 @@ describe("optimistic concurrency", () => {
     const f = getFlag(db, "dispute_auto_triage");
     updateFlag(db, ALICE, f.key, { name: "Dispute auto triage", expectedVersion: f.version });
     const err = expectServiceError(
-      () => setFlagEnvironment(db, BOB, f.key, "production", { enabled: true, expectedVersion: f.version, confirmProduction: f.key }),
+      () => setFlagEnvironment(db, BOB, f.key, "staging", { enabled: !f.environments.staging, expectedVersion: f.version }),
       "VERSION_CONFLICT",
     );
     expect(err.status).toBe(409);
-    expect(getFlag(db, f.key).environments.production).toBe(false);
+    expect(getFlag(db, f.key).environments.staging).toBe(f.environments.staging);
     expect(auditCount(db)).toBe(1);
   });
 });

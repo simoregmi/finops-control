@@ -61,6 +61,14 @@ export const flagFiltersSchema = z.object({
   includeArchived: z.boolean().default(false),
 });
 
+export const requestIdSchema = z.coerce.number().int().positive();
+
+export const approvalFiltersSchema = z.object({
+  status: z.enum(["all", "pending", "approved", "rejected"]).default("all"),
+  flag: z.string().trim().max(64).optional(),
+  limit: z.number().int().min(1).max(500).default(100),
+});
+
 export const auditFiltersSchema = z.object({
   flag: z.string().trim().max(64).optional(),
   actor: z.string().trim().max(120).optional(),

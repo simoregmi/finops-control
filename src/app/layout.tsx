@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ActorSelect } from "@/components/ActorSelect";
+import { countPendingRequests } from "@/server/approvals";
 import { currentActorForDisplay } from "@/server/current-actor";
+import { getDb } from "@/server/db";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -11,6 +13,7 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const actor = await currentActorForDisplay();
+  const pendingApprovals = countPendingRequests(getDb());
   return (
     <html lang="en">
       <body>
@@ -25,6 +28,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </Link>
               <nav className="flex gap-4 text-sm text-slate-300">
                 <Link href="/flags" className="hover:text-white">Feature flags</Link>
+                <Link href="/approvals" className="hover:text-white">
+                  Approvals
+                  {pendingApprovals > 0 && (
+                    <span className="ml-1 rounded-full bg-amber-400 px-1.5 text-xs font-semibold text-slate-900">{pendingApprovals}</span>
+                  )}
+                </Link>
                 <Link href="/audit" className="hover:text-white">Audit log</Link>
               </nav>
             </div>
